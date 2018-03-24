@@ -1,0 +1,1 @@
+import __init__.py as warhammer_forty_thousand_analysis
