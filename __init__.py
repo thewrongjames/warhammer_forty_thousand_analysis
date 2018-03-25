@@ -2,54 +2,12 @@
 This package provides tools for analysing particular eigth edition warhammer
 forty thousand model loadouts.
 """
+import amounts
 
 
-class SingleAmount:
-    """
-    The SingleAmount class represents a random quantity that takes picks
-    uniformly from a range (i.e, a theoretical die). If the range only contains
-    one value, it is just that value. The range includes the stop value.
-    """
-    def __init__(self, start, stop=none):
-        """
-        Create an amount object. If stop is none it will just have the
-        value at start.
-        """
-        self.start = start
-        self.stop = stop if stop is not none else start
-
-    def get_average_value(self):
-        return self.start + ((self.stop - self.start) / 2)
-
-    def __add__(self, other):
-        new_general_amount = GeneralAmount()
-        new_general_amount.add_amount(self)
-        new_general_amount.add_amount(other)
-        return new_general_amount
-
-    def __mul__(self, other):
-        new_general_amount = GeneralAmount()
-        for _ in range(other):
-            new_general_amount.add_amount(self)
-        return new_general_amount
-
-
-class GeneralAmount(SingleAmount):
-    """
-    The GeneralAmount class represents a possibly random quantity. It
-    can be a combination of SingleAmounts (i.e. 2D6).
-    """
-    def __init__(self):
-        self._contained_amounts = []
-
-    def add_amount(self, amount):
-        self._contained_amounts.append(amounts)
-
-    def get_average_value(self):
-        return sum(
-            self._contained_amounts,
-            lambda amount: amount.get_average_value()
-        )
+D_SIX = amounts.SingleAmount(1, 6)
+D_THREE = amounts.SingleAmount(1, 3)
+TWO_D_SIX = 2 * D_SIX
 
 
 class Ability:
@@ -57,17 +15,24 @@ class Ability:
     The ability class represents special rules of models, weapons or wargear,
     that modify how they behave.
     """
-    SET = object()
-    ADD = object()
     MULTIPLY = object()
+    ADD = object()
+    SET = object()
+    RE_ROLL_HITS = object()
+    RE_ROLL_WOUNDS = object()
+
     modification_types = (SET, ADD, MULTIPLY)
+    re_roll_types = (RE_ROLL_HITS, RE_ROLL_WOUNDS)
+
     class InvalidModificationTypeError(Exception): pass
+    class InvalidRerollsError(Exception): pass
 
     def __init__(
             self,
             affects_model,
             stat_line_changes,
-            modification_type
+            modification_type,
+            re_rolls=[]
         ):
         """
         Create an ability object. affects_model determines whether it acts of a
@@ -78,17 +43,30 @@ class Ability:
         if modification_type not in Ability.modification_types:
             raise InvalidModificationTypeError(
                 'modification_type must be one of Ability.SET, Ability.ADD, or'\
-                'Ability.MULTIPLY'
+                ' Ability.MULTIPLY'
             )
+        try:
+            if False in [
+                    re_roll in Ability.re_roll_types for re_roll in re_rolls
+            ]:
+                raise InvalidRerollsError(
+                    'one or more of the values in re_rolls was not valid; each'\
+                    ' re_roll must be one of Ability.RE_ROLL_HITS or '\
+                    'Ability.RE_ROLL_WOUNDS'
+                )
+        except TypeError:
+            raise InvalidRerollsError('re_rolls must be iterable')
+
         self.affects_model = affects_model
         self.stat_line_chanes = stat_line_changes,
         self.modification_type = modification_type
+        self.re_rolls = re_rolls
 
 
 class Item:
     """
     The Item class represents anything in warhammer forty thousand with a
-    points cost and a statline (i.e. weapons and models).
+    points cost and a statline (i.e. weapons, models, and other wargear).
     """
     def __init__(self, stat_line, points, abilities):
         """
@@ -108,15 +86,22 @@ class Model(Item):
     model.
     """
 
-    def get_damage_output(target, weapon, wargear):
+    BALLISTIC_SKILL_STAT_NAME = 'bs'
+    WEAPON_SKILL_STAT_NAME = 'ws'
+
+    def get_average_damage_output(self, target, weapon, wargear):
         pass
 
-    def get_damage_efficiency(target, weapon, wargear):
-        pass
+    def get_average_damage_efficiency(self, target, weapon, wargear):
+        return self.get_damage_output(target, weapon, wargear) / self.points
 
 
 class Weapon(Item):
     """
     The weapon class represents the warhammer forty thousand rules' notion of
-    both melee and ranged weapons.
+    both melee and ranged weapons. In addition to other stats, the stat_line
+    passed in should contain an is_melee key, containing a boolean representing
+    whether or not it is a melee weapon.
     """
+
+    IS_MELEE_STAT_NAME = 'is_melee'
