@@ -8,7 +8,7 @@ import amounts
 
 D6 = amounts.SingleAmount(1, 6)
 D3 = amounts.SingleAmount(1, 3)
-TWO_D6 = 2 * D_SIX
+TWO_D6 = 2 * D6
 
 
 class Ability:
