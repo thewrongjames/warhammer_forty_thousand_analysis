@@ -1,6 +1,7 @@
 """
-This module provides representations of possibly random quantities, such as die
-rolls and fixed values, with methods to get their average value.
+This module provides representations of possibly random quantities,
+such as die rolls and fixed values, with methods to get their
+average value.
 """
 
 
@@ -9,9 +10,10 @@ from fractions import Fraction
 
 class SingleAmount:
     """
-    The SingleAmount class represents a random quantity that takes picks
-    uniformly from a range (i.e, a theoretical die). If the range only contains
-    one value, it is just that value. The range includes the stop value.
+    The SingleAmount class represents a random quantity that takes
+    picks uniformly from a range (i.e, a theoretical die). If the range
+    only contains one value, it is just that value. The range includes
+    the stop value.
     """
     class InvalidStopError(Exception): pass
     class PointNotInAmountRange(Exception): pass
@@ -35,23 +37,27 @@ class SingleAmount:
     def get_probability_at_least(self, value_to_be_at_least, rerolling_from=0):
         """
         Get the probability that a 'roll' will be above at least
-        value_to_be_at_least, allowing for 'rerolls'. This currently only
-        implements rerolling fails, and assumes that rerolls will need to get
-        the same value as the initial roll. Values at or below rerolling_from
-        are 'rerolled'. Non integer-like values may yeild strange results.
+        value_to_be_at_least, allowing for 'rerolls'. This currently
+        only implements rerolling fails, and assumes that rerolls will
+        need to get the same value as the initial roll. Values at or
+        below rerolling_from are 'rerolled'. Non integer-like values
+        may yeild strange results. If rerolling_from is greater than or
+        equal to value_to_be_at_least, it will be set to one less than
+        value_to_be_at_least.
         """
         if not self.start <= value_to_be_at_least <= self.stop:
             raise SingleAmount.PointNotInAmountRange(
-                'both value_to_be_at_least must be at least the start value of'\
-                ' the amount, and at most the stop value'
+                'both value_to_be_at_least must be at least the start value'\
+                ' of the amount, and at most the stop value'
             )
-        if not self.start <= rerolling_from + 1 <= value_to_be_at_least:
+        if not self.start <= rerolling_from + 1:
             raise SingleAmount.PointNotInAmountRange(
-                'rerolling_from + 1 must satisfy start <= rerolling_from + 1 '\
-                '<= value_to_be_at_least'
+                'rerolling_from + 1 must be at least the start of the amount'
             )
-        # rerolling_from + 1 is used as we want zero to be a valid value, and it
-        # needs to be (at least) 1 smaller than value_to_be_at_least anyway,
+        if rerolling_from >= value_to_be_at_least:
+            rerolling_from = value_to_be_at_least - 1
+        # rerolling_from + 1 is used as we want zero to be a valid value, and
+        # it needs to be (at least) 1 smaller than value_to_be_at_least,
         # assuming we are only rerolling fails.
 
         amount_spread = self.stop - self.start + 1 # +1 as range includes stop.
@@ -87,8 +93,8 @@ class SingleAmount:
 class GeneralAmount(SingleAmount):
     """
     The GeneralAmount class represents a possibly random quantity. It
-    can be a combination of SingleAmounts (i.e. 2D6). This is what is returned
-    by operations on SingleAmounts.
+    can be a combination of SingleAmounts (i.e. 2D6). This is what is
+    returned by operations on SingleAmounts.
     """
     def __init__(self):
         self._contained_amounts = []
