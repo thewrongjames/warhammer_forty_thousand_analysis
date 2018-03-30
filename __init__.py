@@ -6,9 +6,9 @@ import operator
 import amounts
 
 
-D_SIX = amounts.SingleAmount(1, 6)
-D_THREE = amounts.SingleAmount(1, 3)
-TWO_D_SIX = 2 * D_SIX
+D6 = amounts.SingleAmount(1, 6)
+D3 = amounts.SingleAmount(1, 3)
+TWO_D6 = 2 * D_SIX
 
 
 class Ability:
@@ -151,7 +151,9 @@ class Model(Item):
 
     def get_average_damage_efficiency(self, target, weapon, wargear):
         try:
-            return self.get_damage_output(target, weapon, wargear) / self.points
+            return (
+                self.get_damage_output(target, weapon, wargear) / self.points
+            )
         except ZeroDivisionError:
             raise InvalidModelForEfficiencyError(
                 'models with zero points cost cannot have an efficiency'
