@@ -89,6 +89,9 @@ class SingleAmount:
     def __rmul__(self, other):
         return self * other
 
+    def __abs__(self):
+        return self.get_average_value()
+
 
 class GeneralAmount(SingleAmount):
     """

@@ -2,13 +2,13 @@
 This package provides tools for analysing particular eigth edition
 warhammer forty thousand model loadouts.
 """
-import operator
+from fractions import Fraction
+
 import amounts
 
 
 D6 = amounts.SingleAmount(1, 6)
 D3 = amounts.SingleAmount(1, 3)
-TWO_D6 = 2 * D6
 
 
 class Ability:
@@ -17,8 +17,8 @@ class Ability:
     wargear, that modify how they behave.
     """
     MODIFICATIONS = [
-        {'name': 'multiply', 'result': operator.mul},
-        {'name': 'add', 'result': operator.add},
+        {'name': 'multiply', 'result': lambda x, y: x * y},
+        {'name': 'add', 'result': lambda x, y: x + y},
         {'name': 'set', 'result': lambda x, y: y},
     ]
 
@@ -63,7 +63,7 @@ class Item:
     """
     class InvalidAbilityError(Exception): pass
 
-    def __init__(self, stat_line, points=0, abilities=[]):
+    def __init__(self, stat_line, points=0, abilities=[], wargear=[]):
         """
         Create a model object, with the stats in stat_line, and points
         cost in points. The required contents of the statline differs
@@ -73,6 +73,7 @@ class Item:
         self.stat_line = stat_line
         self.points = points
         self.abilities = abilities
+        self.wargear = wargear
 
 
 class Model(Item):
@@ -82,31 +83,60 @@ class Model(Item):
     """
 
     class InvalidModelForEfficiencyError(Exception): pass
+    class ZeroToughnessError(Exception): pass
 
-    BALLISTIC_SKILL_STAT_NAME = 'bs'
-    WEAPON_SKILL_STAT_NAME = 'ws'
-    STRENGTH_STAT_NAME = 's'
+    BALLISTIC_SKILL_STAT_NAME = 'BS'
+    WEAPON_SKILL_STAT_NAME = 'WS'
+    STRENGTH_STAT_NAME = 'S'
+    TOUGHNESS_STAT_NAME = 'T'
+    ATTACKS_STAT_NAME = 'A'
+    TO_WOUND_ROLL_MODIFIER_STAT_NAME = 'to_wound_roll_modifier'
 
-    def get_average_damage_output(self, target, weapon, wargear):
-        abilities = self.abilities + wargear.abilities + weapon.abilities
+    def get_wargear_abilities(self):
+        wargear_abilities = []
+        [wargear_abilities.extend(item.abilities) for item in self.wargear]
+        return wargear_abilities
+
+    def get_modified_stat_lines(self, weapon=None):
+        """
+        Get a tulpe of the stat line of the model and of it's weapon
+        (if given) after all the abilities of the wargear and the
+        weapon have been applied to them.
+        """
+
+        # See, I could do it with list comprehensions if I wanted.
+        # wargear_abilities = [
+        #     ability for abilities in [item.abilities for item in self.wargear]
+        #     for ability in abilities
+        # ]
+        wargear_abilities = self.get_wargear_abilities()
+        weapon_abilities = weapon.abilities if weapon else []
 
         modified_self_stat_line = self.stat_line.copy()
-        modified_weapon_stat_line = weapon.stat_line.copy()
+        modified_self_stat_line[Model.TO_WOUND_ROLL_MODIFIER_STAT_NAME] = 0
+        if weapon is None:
+            modified_weapon_stat_line = {}
+        else:
+            modified_weapon_stat_line = weapon.stat_line.copy()
 
-        # Modifiers happen in the order multiply, add, and set, and are then
-        # followed by modifiers due to the weapon, as per designers commentary.
+        # Modifiers happen in the order multiply, add, and set, and are
+        # then followed by modifiers due to the weapon, as per the
+        # designers commentary.
 
         for current_abilities in (
-                self.abilities + wargear.abilities,
-                weapon.abilities
+                self.abilities + wargear_abilities,
+                weapon_abilities
         ):
             for modifications in Ability.MODIFICATIONS:
                 for ability in [
                     ability for ability in current_abilities
                     if ability.modification_type == modification_type
                 ]:
+                    if weapon is None and not ability.affects_model:
+                        continue
                     stat_line = modified_self_stat_line if \
                         ability.affects_model else modified_weapon_stat_line
+
                     for key, modifier in ability.stat_line.items():
                         try:
                             stat_line[key] = modification.result(
@@ -118,36 +148,107 @@ class Model(Item):
                                 'ability attempted to modify non-existant stat'
                             )
 
-        modified_self = Model(modified_self_stat_line)
-        modified_weapon = Weapon(modified_weapon_stat_line)
+        return modified_self_stat_line, modified_weapon_stat_line
 
-        if weapon.stat_line[WEAPON.IS_MELEE_STAT_NAME]:
+    @staticmethod
+    def get_to_wound_roll(strength, toughness):
+        if toughness == 0:
+            return 2
+
+        to_wound_ratio = Fraction(strength, toughness)
+        if to_wound_ratio >= 2:
+            wound_at_or_below = 2
+        elif to_wound_ratio <= Fraction(1, 2):
+            wound_at_or_below = 6
+        elif to_wound_ratio > 1:
+            wound_at_or_below = 3
+        elif to_wound_ratio < 1:
+            wound_at_or_below = 5
+        elif to_wound_ratio == 1:
+            wound_at_or_below = 4
+
+        return wound_at_or_below
+
+    def get_average_damage_output(self, target, weapon):
+        """
+        Calculate the average damage output of a particular model with it's
+        given wargear, with a particular weapon.
+        """
+
+        modified_self_stat_line, modified_weapon_stat_line = \
+            self.get_modified_stat_lines(weapon)
+        modified_target_stat_line, _ = target.get_modified_stat_lines()
+
+        if weapon.stat_line[Weapon.IS_MELEE_STAT_NAME]:
             unmodified_hit_stat = self.stat_line[Model.WEAPON_SKILL_STAT_NAME]
-            modified_hit_stat = modified_self.stat_line[
+            modified_hit_stat = modified_self_stat_line[
                 Model.WEAPON_SKILL_STAT_NAME
             ]
         else:
             unmodified_hit_stat = self.stat_line[
                 Model.BALLISTIC_SKILL_STAT_NAME
             ]
-            modified_hit_stat = modified_self.stat_line[
+            modified_hit_stat = modified_self_stat_line[
                 Model.BALLISTIC_SKILL_STAT_NAME
             ]
 
-        reroll_hits_at_or_below = min(
-            max(
-                [ability.reroll_hits_at_or_below for ability in abilities]
-            ),
-            unmodified_hit_stat - 1
-        )
-        reroll_wounds_at_or_below = max(
-            [ability.reroll_wounds_at_or_below for ability in abilities]
+        # This assumes only re-rolling successes, and then ensures that the
+        # re-rolls happen after modifiers, by only re-rolling what would be
+        # below the original hit stat. If the needed to hit roll is improved
+        # by modifications, that is okay to, as the get_probability_at_least
+        # Amount method will only 'reroll' values below the
+        # value_to_be_at_least that it is given. Also, max will error if
+        # the iterable it is given is empty, so, if that is the case, we
+        # we default to zero.
+
+        all_abilities = (
+            self.abilities
+            + self.get_wargear_abilities()
+            + weapon.abilities
         )
 
-        hit_chance = D_SIX.get_probability_at_least(
-            hit_stat,
+        reroll_hits_at_or_below = min(
+            max(
+                [ability.reroll_hits_at_or_below for ability in all_abilities]
+            ),
+            unmodified_hit_stat - 1
+        ) if all_abilities else 0
+
+        hit_chance = D6.get_probability_at_least(
+            modified_hit_stat,
             reroll_hits_at_or_below
         )
+
+        unmodified_wound_at_or_below = Model.get_to_wound_roll(
+            modified_self_stat_line[Model.STRENGTH_STAT_NAME],
+            modified_target_stat_line[Model.TOUGHNESS_STAT_NAME]
+        )
+        # We subtract the to wound roll modifier, as it modifies the roll, the
+        # opposite of modifying the required value.
+        modified_wound_at_or_below = (
+            unmodified_wound_at_or_below - modified_self_stat_line[
+                Model.TO_WOUND_ROLL_MODIFIER_STAT_NAME
+            ]
+        )
+
+        reroll_wounds_at_or_below = min(
+            max(
+                [ability.reroll_wounds_at_or_below for ability in abilities]
+            ),
+            unmodified_wound_at_or_below - 1
+        ) if all_abilities else 0
+
+        wound_chance = D6.get_probability_at_least(
+            modified_wound_at_or_below,
+            reroll_wounds_at_or_below
+        )
+
+        # abs shouldn't change the value of positive integers, but will get the
+        # average value if they are amounts.
+        attacks = abs(modified_self_stat_line[Model.ATTACKS_STAT_NAME])
+        damage = abs(modified_weapon_stat_line[Weapon.DAMAGE_STAT_NAME])
+
+        return attacks * hit_chance * wound_chance * damage
 
     def get_average_damage_efficiency(self, target, weapon, wargear):
         try:
@@ -166,9 +267,10 @@ class Weapon(Item):
     notion of both melee and ranged weapons. In addition to other
     stats, the stat_line passed in should contain an is_melee key,
     containing a boolean representing whether or not it is a melee
-    weapon. Weapons should not contain a strength characteristic, they
-    should contain abilities that modify the users strength (including
-    setting it to a desired value).
+    weapon. Weapons should not contain a strength or attacks
+    characteristic, they should contain abilities that modify the users
+    strength or attacks (including setting it to a desired value).
     """
 
     IS_MELEE_STAT_NAME = 'is_melee'
+    DAMAGE_STAT_NAME = 'D'
