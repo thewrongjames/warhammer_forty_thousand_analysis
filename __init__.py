@@ -95,6 +95,7 @@ class Model(Item):
     WEAPON_SKILL_STAT_NAME = 'WS'
     STRENGTH_STAT_NAME = 'S'
     TOUGHNESS_STAT_NAME = 'T'
+    WOUNDS_STAT_NAME = 'W'
     ATTACKS_STAT_NAME = 'A'
     TO_WOUND_ROLL_MODIFIER_STAT_NAME = 'to_wound_roll_modifier'
 
@@ -260,6 +261,8 @@ class Model(Item):
         # TODO:
         # Implement saves.
 
+        if damage > target.stat_line[Model.WOUNDS_STAT_NAME]:
+            damage = target.stat_line[Model.WOUNDS_STAT_NAME]
         return attacks * hit_chance * wound_chance * damage
 
     def get_average_damage_efficiency(self, target, weapon):

@@ -1,7 +1,7 @@
 from __init__ import Model, Weapon, Ability, D6, D3
 
 
-toughnesses_one_to_ten = [Model({'T': t}) for t in range(1, 11)]
+toughnesses_one_to_ten = [Model({'T': t, 'W': 2}) for t in range(1, 11)]
 space_marine_veteran_stat_line = {'WS': 4, 'S': 4, 'A': 2}
 
 
