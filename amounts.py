@@ -45,10 +45,9 @@ class SingleAmount:
         equal to value_to_be_at_least, it will be set to one less than
         value_to_be_at_least.
         """
-        if not self.start <= value_to_be_at_least <= self.stop:
+        if not self.start <= value_to_be_at_least:
             raise SingleAmount.PointNotInAmountRange(
-                'both value_to_be_at_least must be at least the start value'\
-                ' of the amount, and at most the stop value'
+                'both value_to_be_at_least must be at least the start value'
             )
         if not self.start <= rerolling_from + 1:
             raise SingleAmount.PointNotInAmountRange(
@@ -61,7 +60,10 @@ class SingleAmount:
         # assuming we are only rerolling fails.
 
         amount_spread = self.stop - self.start + 1 # +1 as range includes stop.
-        fraction_above = (self.stop - value_to_be_at_least + 1) / amount_spread
+        fraction_above = max(
+            (self.stop - value_to_be_at_least + 1) / amount_spread,
+            0
+        )
         # ^ +1 as if it is the value itself it still counts.
         fraction_to_reroll = (rerolling_from + 1 - self.start) / amount_spread
         # ^ +1 as we also reroll the values themselves.

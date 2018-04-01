@@ -9,6 +9,7 @@ import amounts
 
 D6 = amounts.SingleAmount(1, 6)
 D3 = amounts.SingleAmount(1, 3)
+ABILITY_ADD_MODIFICATION_NAME = 'add'
 
 
 class Ability:
@@ -16,10 +17,13 @@ class Ability:
     The ability class represents special rules of models, weapons or
     wargear, that modify how they behave.
     """
+    MULTIPLY_MODIFICATION_NAME = 'multiply'
+    ADD_MODIFICATION_NAME = ABILITY_ADD_MODIFICATION_NAME
+    SET_MODIFICATION_NAME = 'set'
     MODIFICATIONS = [
-        {'name': 'multiply', 'result': lambda x, y: x * y},
-        {'name': 'add', 'result': lambda x, y: x + y},
-        {'name': 'set', 'result': lambda x, y: y},
+        {'name': MULTIPLY_MODIFICATION_NAME, 'result': lambda x, y: x * y},
+        {'name': ADD_MODIFICATION_NAME, 'result': lambda x, y: x + y},
+        {'name': SET_MODIFICATION_NAME, 'result': lambda x, y: y},
     ]
 
     class InvalidModificationTypeError(Exception): pass
@@ -27,9 +31,9 @@ class Ability:
 
     def __init__(
             self,
-            affects_model,
-            stat_line_changes,
-            modification_type,
+            affects_model=True,
+            stat_line_changes={},
+            modification_type=ABILITY_ADD_MODIFICATION_NAME,
             reroll_hits_at_or_below=0,
             reroll_wounds_at_or_below=0
         ):
@@ -39,7 +43,8 @@ class Ability:
         to be made to the stat line, and modification_type is how these
         changes affect the stat line they are modifying. For reroll
         all, the reroll value should just be set to six, as successes
-        are not rerolled anyway.
+        are not rerolled anyway. The stat line changes default to
+        adding.
         """
         if modification_type not in [
                 modification['name'] for modification in Ability.MODIFICATIONS
@@ -49,7 +54,7 @@ class Ability:
             )
 
         self.affects_model = affects_model
-        self.stat_line_changes = stat_line_changes,
+        self.stat_line_changes = stat_line_changes
         self.modification_type = modification_type
         self.reroll_hits_at_or_below = reroll_hits_at_or_below
         self.reroll_wounds_at_or_below = reroll_wounds_at_or_below
@@ -63,7 +68,7 @@ class Item:
     """
     class InvalidAbilityError(Exception): pass
 
-    def __init__(self, stat_line, points=0, abilities=[], wargear=[]):
+    def __init__(self, stat_line, points=0, wargear=[], abilities=[], name=''):
         """
         Create a model object, with the stats in stat_line, and points
         cost in points. The required contents of the statline differs
@@ -74,6 +79,7 @@ class Item:
         self.points = points
         self.abilities = abilities
         self.wargear = wargear
+        self.name = name
 
 
 class Model(Item):
@@ -127,21 +133,21 @@ class Model(Item):
                 self.abilities + wargear_abilities,
                 weapon_abilities
         ):
-            for modifications in Ability.MODIFICATIONS:
+            for modification in Ability.MODIFICATIONS:
                 for ability in [
                     ability for ability in current_abilities
-                    if ability.modification_type == modification_type
+                    if ability.modification_type == modification['name']
                 ]:
                     if weapon is None and not ability.affects_model:
                         continue
                     stat_line = modified_self_stat_line if \
                         ability.affects_model else modified_weapon_stat_line
 
-                    for key, modifier in ability.stat_line.items():
+                    for key, modifier in ability.stat_line_changes.items():
                         try:
-                            stat_line[key] = modification.result(
+                            stat_line[key] = modification['result'](
                                 stat_line[key],
-                                ability.stat_line[key]
+                                ability.stat_line_changes[key]
                             )
                         except KeyError:
                             raise Item.InvalidAbilityError(
@@ -233,7 +239,10 @@ class Model(Item):
 
         reroll_wounds_at_or_below = min(
             max(
-                [ability.reroll_wounds_at_or_below for ability in abilities]
+                [
+                    ability.reroll_wounds_at_or_below
+                    for ability in all_abilities
+                ]
             ),
             unmodified_wound_at_or_below - 1
         ) if all_abilities else 0
@@ -248,16 +257,22 @@ class Model(Item):
         attacks = abs(modified_self_stat_line[Model.ATTACKS_STAT_NAME])
         damage = abs(modified_weapon_stat_line[Weapon.DAMAGE_STAT_NAME])
 
+        # TODO:
+        # Implement saves.
+
         return attacks * hit_chance * wound_chance * damage
 
-    def get_average_damage_efficiency(self, target, weapon, wargear):
+    def get_average_damage_efficiency(self, target, weapon):
+        points_cost = self.points + weapon.points + sum(
+            [item.points for item in self.wargear]
+        )
         try:
             return (
-                self.get_damage_output(target, weapon, wargear) / self.points
+                self.get_average_damage_output(target, weapon) / points_cost
             )
         except ZeroDivisionError:
             raise InvalidModelForEfficiencyError(
-                'models with zero points cost cannot have an efficiency'
+                'zero points cost cannot have an efficiency'
             )
 
 
