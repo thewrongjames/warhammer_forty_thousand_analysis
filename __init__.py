@@ -97,6 +97,7 @@ class Model(Item):
     TOUGHNESS_STAT_NAME = 'T'
     WOUNDS_STAT_NAME = 'W'
     ATTACKS_STAT_NAME = 'A'
+    ARMOUR_SAVE_STAT_NAME = 'Sv'
     TO_WOUND_ROLL_MODIFIER_STAT_NAME = 'to_wound_roll_modifier'
 
     def get_wargear_abilities(self):
@@ -258,21 +259,32 @@ class Model(Item):
         attacks = abs(modified_self_stat_line[Model.ATTACKS_STAT_NAME])
         damage = abs(modified_weapon_stat_line[Weapon.DAMAGE_STAT_NAME])
 
-        # TODO:
-        # Implement saves.
+        # The AP value is subtracted as it is always negative or zero, and they
+        # need to make the saves harder, i.e. higher.
+        save_roll = (
+            target.stat_line[Model.ARMOUR_SAVE_STAT_NAME]
+            - weapon.stat_line[Weapon.ARMOUR_PIERCING_STAT_NAME]
+        )
+        fraction_unsaved = 1 - D6.get_probability_at_least(save_roll)
 
         if damage > target.stat_line[Model.WOUNDS_STAT_NAME]:
             damage = target.stat_line[Model.WOUNDS_STAT_NAME]
-        return attacks * hit_chance * wound_chance * damage
+        return attacks * hit_chance * wound_chance * damage * fraction_unsaved
 
-    def get_average_damage_efficiency(self, target, weapon):
-        points_cost = self.points + weapon.points + sum(
-            [item.points for item in self.wargear]
+    def get_average_damage_efficiency(self, target, weapon_combination):
+        points_cost = (
+            self.points
+            + sum([weapon.points for weapon in weapon_combination])
+            + sum([item.points for item in self.wargear])
+        )
+        average_output = sum(
+            [
+                self.get_average_damage_output(target, weapon)
+                for weapon in weapon_combination
+            ]
         )
         try:
-            return (
-                self.get_average_damage_output(target, weapon) / points_cost
-            )
+            return average_output / points_cost
         except ZeroDivisionError:
             raise InvalidModelForEfficiencyError(
                 'zero points cost cannot have an efficiency'
@@ -292,3 +304,4 @@ class Weapon(Item):
 
     IS_MELEE_STAT_NAME = 'is_melee'
     DAMAGE_STAT_NAME = 'D'
+    ARMOUR_PIERCING_STAT_NAME = 'AP'

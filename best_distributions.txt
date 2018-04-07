@@ -1,0 +1,5 @@
+two_chainswords: 16
+two_lightning_claws: 5
+power_sword: 2
+power_first: 77
+thunder_hammer: 50
